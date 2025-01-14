@@ -9,3 +9,5 @@ wheels/
 # Virtual environments
 .venv
 raindrop_token.txt
+credentials.json
+client_secret_456242472377-gh72p5ub9qfd22imb2obs66htm6e2i1d.apps.googleusercontent.com.json
