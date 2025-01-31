@@ -2,9 +2,12 @@ import glob
 import json
 import os
 import pprint
+import re
 import time
+from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Generator, Optional, Tuple
+from typing import Optional, Tuple
+from urllib.parse import urlparse
 
 import click
 import gspread
@@ -15,11 +18,13 @@ from google.oauth2.credentials import Credentials
 SPREADSHEET_ID = "17o8WlEqAS9QXe5U34Yux-z40uWuUlycf8d3gpuaY5D0"
 SHEET_NAME = "シート1"
 
+USER_INFO = json.load(
+    open(os.path.join(os.path.dirname(__file__), "user.json"), encoding="utf-8")
+)
+
 
 # Notion API設定
-NOTION_API_SECRET = (
-    open(os.path.join(os.path.dirname(__file__), "notion_secret.txt")).read().strip()
-)
+NOTION_API_SECRET = USER_INFO["notion_api_secret"]
 NOTION_DATABASE_ID = "17e49c28c38e80f1837efca5e436a572"
 NOTION_API_URL = "https://api.notion.com/v1/pages"
 
@@ -114,9 +119,7 @@ def read_google_sheet(
 
 
 # Raindrop.io API設定
-RAINDROP_API_TOKEN = (
-    open(os.path.join(os.path.dirname(__file__), "raindrop_token.txt")).read().strip()
-)
+RAINDROP_API_TOKEN = USER_INFO["raindrop_api_token"]
 
 # Raindrop.ioのAPIヘッダー
 raindrop_headers = {"Authorization": f"Bearer {RAINDROP_API_TOKEN}"}
@@ -143,6 +146,7 @@ TargetSites = [
     "nature.com",
     "science.org",
     "aaai.org",
+    "copernicus.org",
 ]
 
 
@@ -162,8 +166,8 @@ def get_collection_id(name: str):
 def move_bookmark(bm, dst_coll_name: str):
     assert dst_coll_name is not None
 
-    move_url = f"https://api.raindrop.io/rest/v1/raindrop/{bm['_id']}/move"
-    move_data = {"collectionId": get_collection_id(dst_coll_name)}
+    move_url = f"https://api.raindrop.io/rest/v1/raindrop/{bm['_id']}"
+    move_data = {"collection": {"$id": get_collection_id(dst_coll_name)}}
     response = requests.put(move_url, headers=raindrop_headers, json=move_data)
     response.raise_for_status()
 
@@ -172,11 +176,7 @@ def read_raindrop_bookmarks(
     src_coll_name, dst_coll_name: str | None, limit: int, api_token: str | None = None
 ) -> Generator[PaperLink, Tuple[str, Optional[str], Optional[str]], None]:
     if api_token is None:
-        api_token = (
-            open(os.path.join(os.path.dirname(__file__), "raindrop_token.txt"))
-            .read()
-            .strip()
-        )
+        api_token = RAINDROP_API_TOKEN
 
     assert limit > 0
 
@@ -193,6 +193,8 @@ def read_raindrop_bookmarks(
 
         bookmarks = response.json()["items"]
 
+        # pprint.pprint(bookmarks)
+
         if len(bookmarks) == 0:
             return
 
@@ -200,13 +202,18 @@ def read_raindrop_bookmarks(
             if "link" not in bm:
                 continue
 
+            if m := re.search(r"p([1-5])", bm.get("excerpt", "")):
+                priority = int(m.group(1))
+            else:
+                priority = 3
             data = PaperLink(
                 title=bm["title"],
                 url=bm["link"],
                 tags=[],
-                priority=3,
+                priority=priority,
                 note=bm.get("excerpt", ""),
             )
+
             yield data
 
             if dst_coll_name:
@@ -304,6 +311,10 @@ def main(source: str, delete: bool, dry_run: bool, limit: int = 10, interval: in
         for data in read_raindrop_bookmarks(
             RAINDROP_SRC_COLLECTION_NAME, dst_coll_name=dst_coll_name, limit=limit
         ):
+            parsed_url = urlparse(data.url)
+            if parsed_url.hostname not in TargetSites:
+                print(f"Skip: {parsed_url.hostname}: {data.url}")
+                continue
             print("\n\n----------------")
             pprint.pprint(data)
             create_notion_page(data, dry_run)
