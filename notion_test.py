@@ -1,3 +1,4 @@
+import datetime
 import glob
 import json
 import os
@@ -10,7 +11,6 @@ from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 import click
-import gspread
 import requests
 from google.oauth2.credentials import Credentials
 
@@ -37,6 +37,7 @@ data = {
     "priority": None,
 }
 
+
 @dataclass
 class PaperLink:
     title: str
@@ -44,10 +45,11 @@ class PaperLink:
     tags: list[str]
     priority: int
     note: str
+    created_at: Optional[datetime.datetime]
 
 
 # Google Sheets APIの認証
-def get_google_credentials():
+def get_google_credentials() -> Credentials:
     client_id = (
         "456242472377-gh72p5ub9qfd22imb2obs66htm6e2i1d.apps.googleusercontent.com"
     )
@@ -73,49 +75,6 @@ def get_google_credentials():
     #
     # credentials.refresh(Request())
     return credentials
-
-
-def read_google_sheet(
-    limit: int, delete: bool
-) -> Generator[PaperLink, Tuple[int, bool], None]:
-    cred = get_google_credentials()
-    cli = gspread.authorize(cred)
-
-    sheet = cli.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
-
-    r = 3
-    count = 0
-    while count < limit:
-        vals = sheet.get_values(f"A{r}:D{r}")[0]
-
-        if len(vals) == 0:
-            return
-
-        elif len(vals) == 3:
-            vals.append("")
-
-        elif len(vals) == 4:
-            pass  # OK
-
-        else:
-            raise RuntimeError(f"Invalid data: {vals}")
-
-        data = PaperLink(
-            title=vals[0],
-            url=vals[2],
-            tags=[],
-            priority=int(vals[1]),
-            note=vals[3],
-        )
-
-        print(f"{delete=}")
-        if delete:
-            sheet.delete_rows(r)
-        else:
-            r += 1
-
-        yield data
-        count += 1
 
 
 # Raindrop.io API設定
@@ -144,13 +103,14 @@ TargetSites = [
     "ieeexplore.ieee.org",
     "icml.cc",
     "nature.com",
+    "www.nature.com",
     "science.org",
     "aaai.org",
     "copernicus.org",
 ]
 
 
-def get_collection_id(name: str):
+def get_collection_id(name: str) -> int:
     url = "https://api.raindrop.io/rest/v1/collections"
     response = requests.get(url, headers=raindrop_headers)
     response.raise_for_status()
@@ -158,12 +118,13 @@ def get_collection_id(name: str):
 
     for collection in collections:
         if collection["title"] == name:
+            assert type(collection["_id"]) is int, "Collection ID must be an integer"
             return collection["_id"]
     else:
         raise ValueError(f"フォルダ '{name}' が見つかりません。")
 
 
-def move_bookmark(bm, dst_coll_name: str):
+def move_bookmark(bm, dst_coll_name: str) -> None:
     assert dst_coll_name is not None
 
     move_url = f"https://api.raindrop.io/rest/v1/raindrop/{bm['_id']}"
@@ -173,7 +134,10 @@ def move_bookmark(bm, dst_coll_name: str):
 
 
 def read_raindrop_bookmarks(
-    src_coll_name, dst_coll_name: str | None, limit: int, api_token: str | None = None
+    src_coll_name: str,
+    dst_coll_name: str | None,
+    limit: int,
+    api_token: str | None = None,
 ) -> Generator[PaperLink, Tuple[str, Optional[str], Optional[str]], None]:
     if api_token is None:
         api_token = RAINDROP_API_TOKEN
@@ -199,6 +163,7 @@ def read_raindrop_bookmarks(
             return
 
         for bm in bookmarks:
+            print(f"{bm=}")
             if "link" not in bm:
                 continue
 
@@ -212,6 +177,7 @@ def read_raindrop_bookmarks(
                 tags=[],
                 priority=priority,
                 note=bm.get("excerpt", ""),
+                created_at=datetime.datetime.now(),
             )
 
             yield data
@@ -225,7 +191,7 @@ def read_raindrop_bookmarks(
 
 
 # 新しいページを作成
-def create_notion_page(data, dry_run=False):
+def create_notion_page(data, dry_run=False) -> None:
     assert data.title is not None, "タイトルが指定されていません"
     assert data.url, "URLが指定されていません"
 
@@ -250,6 +216,11 @@ def create_notion_page(data, dry_run=False):
             },
             "優先度": {  # 優先度フィールド（数値形式で設定されているプロパティ名）
                 "number": data.priority
+            },
+            "作成日時": {  # 作成日時フィールド（日時形式で設定されているプロパティ名）
+                "date": {
+                    "start": data.created_at.isoformat() if data.created_at else None
+                }
             },
         },
         "children": [
@@ -286,7 +257,9 @@ def create_notion_page(data, dry_run=False):
 @click.option("--limit", type=int, default=10, help="Limit")
 @click.option("--interval", type=int, default=2, help="Interval")
 @click.option("--source", type=click.Choice(["google", "raindrop"]), default="google")
-def main(source: str, delete: bool, dry_run: bool, limit: int = 10, interval: int = 2):
+def main(
+    source: str, delete: bool, dry_run: bool, limit: int = 10, interval: int = 2
+) -> None:
     assert source in ["google", "raindrop"], "Invalid source"
 
     if dry_run is True:
@@ -295,31 +268,24 @@ def main(source: str, delete: bool, dry_run: bool, limit: int = 10, interval: in
 
     data: PaperLink
 
-    if source == "google":
-        for data in read_google_sheet(limit, delete=delete):
-            print("\n\n----------------")
-            pprint.pprint(data)
-            create_notion_page(data, dry_run)
-
-            if limit > 1:
-                time.sleep(interval)
+    if delete is True:
+        dst_coll_name = RAINDROP_DST_COLLECTION_NAME
     else:
-        if delete is True:
-            dst_coll_name = RAINDROP_DST_COLLECTION_NAME
-        else:
-            dst_coll_name = None
-        for data in read_raindrop_bookmarks(
-            RAINDROP_SRC_COLLECTION_NAME, dst_coll_name=dst_coll_name, limit=limit
-        ):
-            parsed_url = urlparse(data.url)
-            if parsed_url.hostname not in TargetSites:
-                print(f"Skip: {parsed_url.hostname}: {data.url}")
-                continue
-            print("\n\n----------------")
-            pprint.pprint(data)
-            create_notion_page(data, dry_run)
-            if limit > 1:
-                time.sleep(interval)
+        dst_coll_name = None
+    for data in read_raindrop_bookmarks(
+        RAINDROP_SRC_COLLECTION_NAME, dst_coll_name=dst_coll_name, limit=limit
+    ):
+        print(f"{data=}")
+        parsed_url = urlparse(data.url)
+        hostname = parsed_url.hostname
+        if hostname not in TargetSites:
+            print(f"Skip: {hostname}: {data.url}")
+            continue
+        print("\n\n----------------")
+        pprint.pprint(data)
+        create_notion_page(data, dry_run)
+        if limit > 1:
+            time.sleep(interval)
 
 
 # 実行

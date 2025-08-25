@@ -11,6 +11,8 @@ dependencies = [
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.2.1",
     "gspread>=6.1.4",
+    "mypy>=1.17.0",
+    "pysen>=0.11.0",
     "pytest>=8.3.4",
     "pyzotero>=1.6.8",
     "requests>=2.32.3",
@@ -19,6 +21,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.17.0",
     "ruff>=0.9.1",
 ]
 
@@ -26,9 +29,33 @@ dev = [
 # Enable Pyflakes (`F`) and a subset of the pycodestyle (`E`)  codes by default.
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
 # McCabe complexity (`C901`) by default.
+# select = ["E4", "E7", "E9", "F"]
 select = ["E4", "E7", "E9", "F"]
 ignore = []
+# ignore = []
 
 # Allow fix for all enabled rules (when `--fix`) is provided.
 fixable = ["ALL"]
 unfixable = []
+
+pydocstyle.convention = "google"
+
+[linter.per-file-ignores]
+
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+ignore_missing_imports = true
+
