@@ -89,24 +89,25 @@ RAINDROP_DST_COLLECTION_NAME = "論文/read"
 
 
 TargetSites = [
-    "arxiv.org",
-    "nips.cc",
-    "iclr.cc",
-    "openreview.net",
-    "openaccess.thecvf.com",
+    "aaai.org",
     "ametsoc.org",
+    "arxiv.org",
+    "copernicus.org",
     "dl.acm.org",
-    "onlinelibrary.wiley.com",
+    "iclr.cc",
+    "icml.cc",
+    "ieeexplore.ieee.org",
     "mdpi.org",
+    "nature.com",
+    "nips.cc",
+    "onlinelibrary.wiley.com",
+    "openaccess.thecvf.com",
+    "openreview.net",
+    "researchsquare.com",
+    "science.org",
     "sciencedirect.com",
     "semanticscholar.org",
-    "ieeexplore.ieee.org",
-    "icml.cc",
-    "nature.com",
     "www.nature.com",
-    "science.org",
-    "aaai.org",
-    "copernicus.org",
 ]
 
 
@@ -191,7 +192,7 @@ def read_raindrop_bookmarks(
 
 
 # 新しいページを作成
-def create_notion_page(data, dry_run=False) -> None:
+def create_notion_page(data: PaperLink, dry_run: bool = False) -> None:
     assert data.title is not None, "タイトルが指定されていません"
     assert data.url, "URLが指定されていません"
 

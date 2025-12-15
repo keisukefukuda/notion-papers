@@ -38,9 +38,10 @@ ignore = []
 fixable = ["ALL"]
 unfixable = []
 
-pydocstyle.convention = "google"
+[tool.ruff.lint.per-file-ignores]
 
-[linter.per-file-ignores]
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 
 [tool.mypy]

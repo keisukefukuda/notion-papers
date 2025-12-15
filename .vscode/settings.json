@@ -1,4 +1,10 @@
 {
+  "[toml]": {
+    "editor.defaultFormatter": "tamasfe.even-better-toml",
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": true,
+    "files.insertFinalNewline": true
+  },
   "[python]": {
       "editor.formatOnSave": true,
       "editor.codeActionsOnSave": {
@@ -13,4 +19,5 @@
     "error": "Error",
     "note": "Information"
   }
+
 }
