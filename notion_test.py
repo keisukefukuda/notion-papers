@@ -7,16 +7,12 @@ import re
 import time
 from collections.abc import Generator
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 from urllib.parse import urlparse
 
 import click
 import requests
 from google.oauth2.credentials import Credentials
-
-# Google Sheets設定
-SPREADSHEET_ID = "17o8WlEqAS9QXe5U34Yux-z40uWuUlycf8d3gpuaY5D0"
-SHEET_NAME = "シート1"
 
 USER_INFO = json.load(
     open(os.path.join(os.path.dirname(__file__), "user.json"), encoding="utf-8")
@@ -24,9 +20,11 @@ USER_INFO = json.load(
 
 
 # Notion API設定
-NOTION_API_SECRET = USER_INFO["notion_api_secret"]
-NOTION_DATABASE_ID = "17e49c28c38e80f1837efca5e436a572"
-NOTION_API_URL = "https://api.notion.com/v1/pages"
+NOTION_API_SECRET: str = USER_INFO["notion_api_secret"]
+NOTION_DATABASE_ID: str = "17e49c28c38e80f1837efca5e436a572"
+NOTION_API_URL: str = "https://api.notion.com/v1/pages"
+
+type RaindropBookmark = dict[str, str | int | dict[str, Any] | list]
 
 
 # サンプルデータ
@@ -125,10 +123,12 @@ def get_collection_id(name: str) -> int:
         raise ValueError(f"フォルダ '{name}' が見つかりません。")
 
 
-def move_bookmark(bm, dst_coll_name: str) -> None:
-    assert dst_coll_name is not None
+def move_bookmark(bm: RaindropBookmark, dst_coll_name: str) -> None:
+    assert type(dst_coll_name) is str
 
-    move_url = f"https://api.raindrop.io/rest/v1/raindrop/{bm['_id']}"
+    _id = str(bm["_id"])
+
+    move_url = f"https://api.raindrop.io/rest/v1/raindrop/{_id}"
     move_data = {"collection": {"$id": get_collection_id(dst_coll_name)}}
     response = requests.put(move_url, headers=raindrop_headers, json=move_data)
     response.raise_for_status()
@@ -146,7 +146,7 @@ def read_raindrop_bookmarks(
     assert limit > 0
 
     coll_id = get_collection_id(src_coll_name)
-    bookmarks = []
+    bookmarks: list[RaindropBookmark] = []
 
     PER_PAGE = 20
 
@@ -168,16 +168,17 @@ def read_raindrop_bookmarks(
             if "link" not in bm:
                 continue
 
-            if m := re.search(r"p([1-5])", bm.get("excerpt", "")):
+            excerpt: str = str(bm.get("excerpt", ""))
+            if m := re.search(r"p([1-5])", excerpt):
                 priority = int(m.group(1))
             else:
                 priority = 3
             data = PaperLink(
-                title=bm["title"],
-                url=bm["link"],
+                title=str(bm["title"]),
+                url=str(bm["link"]),
                 tags=[],
                 priority=priority,
-                note=bm.get("excerpt", ""),
+                note=str(bm.get("excerpt", "")),
                 created_at=datetime.datetime.now(),
             )
 
